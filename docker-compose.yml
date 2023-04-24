@@ -1,0 +1,63 @@
+#`version: "3.5"` указывает версию формата файла Docker Compose, который будет использоваться. В данном случае это версия 3.5. Эта версия поддерживает такие возможности, как объекты `config`, `секреты` и опции `deploy` для развертывания сервисов в рое.
+version: "3.5"
+
+#Это определение сети под названием "docker_lasp" с именем сети по умолчанию. Эта сеть может использоваться для соединения различных служб, определенных в файле Docker Compose, позволяя им взаимодействовать друг с другом.
+networks:
+  docker_lasp:
+    name: $DEFAULT_NETWORK
+
+services:
+  #`traefik:` определяет службу Docker с именем "traefik", которая запускает образ обратного прокси/балансировщика нагрузки Traefik с определенными конфигурациями и настройками. Он открывает порты 80, 443 и 8080 и монтирует тома для сокета Docker, сертификатов Let's Encrypt и основных учетных данных аутентификации. Он также задает сетевые настройки для запуска службы.
+  traefik:
+    #`команда` - это ключ в файле Docker Compose, который указывает команду, выполняемую при запуске контейнера. В данном случае команда представляет собой список аргументов, передаваемых образу Traefik для настройки его поведения. Эти аргументы включают настройки для Traefik API, разрешителя сертификатов Let's Encrypt, точки входа для HTTP-трафика и настройки провайдера Docker.
+    command:
+      - "--api.dashboard=true"
+      - "--api.debug=false"
+      - "--log.level=ERROR"
+      #`- "--certificatesresolvers.letsencrypt.acme.email=EMAIL"` задает адрес электронной почты, который будет использоваться преобразователем сертификатов Let's Encrypt для службы Traefik. Этот адрес электронной почты используется для важных уведомлений, связанных с процессом выпуска и обновления сертификатов Let's Encrypt. Важно установить действительный адрес электронной почты, чтобы вы получали эти уведомления и могли предпринять соответствующие действия в случае необходимости.
+      - "--certificatesresolvers.letsencrypt.acme.email=EMAIL"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      #`- "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"` задает путь к файлу, в котором сертификаты Let's Encrypt и информация об учетной записи будут храниться службой Traefik. Файл находится в каталоге `/letsencrypt` в контейнере Traefik, который монтируется как том в каталог `./traefik/letsencrypt` на хост-машине. Это позволяет службе Traefik сохранять сертификаты Let's Encrypt и информацию об учетной записи при перезагрузках и обновлениях контейнера.
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.websecure.address=:443"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker=true"
+    #`env_file` - это ключ в файле Docker Compose, который указывает путь к файлу, содержащему переменные окружения, которые необходимо установить в контейнере. В данном случае файл "traefik.env" содержит переменные окружения, которые используются сервисом Traefik для настройки его поведения.
+    env_file:
+      - "traefik.env"
+    #`image: traefik:2.9.8` - это указание образа Docker, который будет использоваться для службы Traefik. В данном случае используется версия 2.9.8 образа Traefik.
+    image: traefik:2.9.8
+    #`labels` - это ключ в файле Docker Compose, который позволяет добавлять метаданные к контейнеру Docker. В данном случае метки используются для настройки поведения службы обратного прокси/балансировщика нагрузки Traefik. Эти метки определяют настройки для приборной панели Traefik, точек входа для HTTP-трафика, основных учетных данных аутентификации и разрешителя сертификатов Let's Encrypt. Они также указывают преобразователь сертификатов TLS, который будет использоваться для службы Traefik.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.middlewares=dashboard_auth"
+      #Эта строка настраивает правило маршрутизации для приборной панели Traefik. Она указывает, что входящий HTTP-трафик с заголовком хоста "proxy.EXAMPLE.COM" должен быть направлен на службу приборной панели Traefik. Это позволит пользователям получить доступ к приборной панели Traefik, посетив "proxy.EXAMPLE.COM" в своем веб-браузере. Обратите внимание, что "EXAMPLE.COM" следует заменить на фактическое доменное имя или IP-адрес сервера, на котором работает служба Traefik.
+      - "traefik.http.routers.dashboard.rule=Host(`proxy.EXAMPLE.COM`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      #`- "traefik.http.middlewares.dashboard_auth.basicauth.usersfile=/dashboard_auth/sampleuser.yml"` - это метка в файле Docker Compose, указывающая путь к файлу, содержащему базовые учетные данные аутентификации для приборной панели Traefik. Файл `sampleuser.yml` монтируется как том в контейнере Traefik и содержит список имен пользователей и паролей, которые используются для аутентификации пользователей, получающих доступ к приборной панели Traefik. Эта метка является частью конфигурации службы Traefik и обеспечивает защиту доступа к приборной панели с помощью базовой аутентификации.
+      - "traefik.http.middlewares.dashboard_auth.basicauth.usersfile=/dashboard_auth/sampleuser.yml"
+    #`ports` - это ключ в файле Docker Compose, который определяет порты, открываемые контейнером Docker, и то, как они должны быть сопоставлены с хост-машиной. В данном случае сервис Traefik открывает порты 80, 443 и 8080 и сопоставляет их с теми же портами на хост-машине. Это позволяет направить входящий трафик на эти порты на службу Traefik, запущенную в контейнере Docker.
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    #`restart: always` - это ключ в файле Docker Compose, который определяет политику перезапуска для контейнера Docker. В данном случае он имеет значение "always", что означает, что контейнер всегда будет перезапущен, если он остановится по какой-либо причине, например, в результате сбоя или ручной остановки. Это гарантирует, что служба Traefik всегда запущена и доступна для обработки входящего трафика.
+    restart: always
+    #`volumes` - это ключ в файле Docker Compose, который указывает тома, монтируемые в контейнере Docker. В данном случае служба Traefik монтирует три тома:
+    volumes:
+      #`- "//var/run/docker.sock://var/run/docker.sock"` - это указание тома, который должен быть смонтирован в Docker-контейнере Traefik. Он монтирует файл сокета Docker с хост-машины в то же место в контейнере, что позволяет службе Traefik взаимодействовать с демоном Docker и динамически настраивать свои правила маршрутизации на основе состояния других контейнеров Docker, запущенных в той же сети.
+      - "//var/run/docker.sock://var/run/docker.sock"
+      #`- "./traefik/letsencrypt:/letsencrypt"` указывает том, который должен быть смонтирован в Docker-контейнер Traefik. Он монтирует каталог `./traefik/letsencrypt` с хост-машины в каталог `/letsencrypt` в контейнере. Это позволяет службе Traefik получить доступ к сертификатам Let's Encrypt, которые хранятся в каталоге `./traefik/letsencrypt` на хост-машине.
+      - "./traefik/letsencrypt:/letsencrypt"
+      #`- "./traefik/dashboard_auth/sampleuser.yml:/dashboard_auth/sampleuser.yml"` указывает том, который должен быть смонтирован в Docker-контейнере Traefik. Он монтирует файл `sampleuser.yml` с хост-машины в каталог `/dashboard_auth/sampleuser.yml` в контейнере. Этот файл содержит основные учетные данные аутентификации, которые используются службой Traefik для защиты доступа к приборной панели Traefik.
+      - "./traefik/dashboard_auth/sampleuser.yml:/dashboard_auth/sampleuser.yml"
+    #`container_name: traefik` - это указание имени контейнера Docker, который будет создан для сервиса Traefik. В данном случае контейнер будет назван "traefik". Это позволит вам легко ссылаться на контейнер и управлять им, используя его имя вместо идентификатора контейнера.
+    container_name: traefik
+    #`networks: - "docker_lasp"` определяет сеть, в которой будет работать служба Traefik. В данном случае указывается сеть с именем "docker_lasp". Это позволяет службе Traefik взаимодействовать с другими службами, работающими в той же сети, и получать доступ к таким ресурсам, как сокет Docker и сертификаты Let's Encrypt, которые смонтированы как тома в других контейнерах в той же сети.
+    networks:
+      - "docker_lasp"
