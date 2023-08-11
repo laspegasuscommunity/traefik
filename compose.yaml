@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  #Это конфигурация Docker Compose для службы обратного прокси Traefik.
+  traefik:
+    command: ["--api.dashboard=true", "--api.debug=false", "--log.level=ERROR", "--certificatesresolvers.letsencrypt.acme.email=EMAIL", "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web", "--certificatesresolvers.letsencrypt.acme.httpchallenge=true", "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json", "--entrypoints.web.address=:80", "--entrypoints.web.http.redirections.entryPoint.to=websecure", "--entrypoints.websecure.address=:443", "--providers.docker.exposedbydefault=false", "--providers.docker=true"]
+    container_name: traefik
+    env_file: traefik.env
+    image: traefik:latest
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      traefik.enable: "true"
+      traefik.http.middlewares.dashboard.compress: "true"
+      traefik.http.middlewares.dashboard_auth.basicauth.usersfile: "/dashboard_auth/sampleuser.yml"
+      traefik.http.routers.dashboard.entrypoints: "websecure"
+      traefik.http.routers.dashboard.middlewares: "dashboard_auth"
+      traefik.http.routers.dashboard.rule: "Host(`proxy.${DOMAIN}`)"
+      traefik.http.routers.dashboard.service: "api@internal"
+      traefik.http.routers.dashboard.tls.certresolver: "letsencrypt"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - "//var/run/docker.sock://var/run/docker.sock"
+      - "./traefik/letsencrypt:/letsencrypt"
+      - "./traefik/dashboard_auth/sampleuser.yml:/dashboard_auth/sampleuser.yml"
+
+networks:
+  default:
+    external: true
+    name: $NETWORK
